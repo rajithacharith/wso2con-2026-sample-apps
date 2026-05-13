@@ -1,23 +1,21 @@
 import { useEffect, useState } from "react";
-import { useAsgardeo } from "@asgardeo/react";
 import { Heart } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { SearchPanel } from "../components/SearchPanel";
 import {
   createBooking,
-  getBookedFlights,
   getFlights,
   getHotels,
   getTrips
 } from "../api";
-import { ASGARDEO_CLIENT_ID, getCDSProfile, updateCDSProfile } from "../cds-api";
-import { formatPrice, isSameFlight } from "../utils/bookings";
+import { getCDSProfile, updateCDSProfile } from "../cds-api";
+import { formatPrice } from "../utils/bookings";
 import { buildFlightDetailsPath } from "../utils/routes";
 
 function extractFavoriteFlightIds(profile) {
   const normalizedProfile = profile?.data || profile?.profile || profile || {};
   const applicationData = normalizedProfile?.application_data || normalizedProfile?.applicationData || {};
-  const appScopedFavorites = applicationData?.[ASGARDEO_CLIENT_ID]?.flight_no;
+  const appScopedFavorites = applicationData?.wayfinder?.flight_no;
 
   if (Array.isArray(appScopedFavorites)) {
     return appScopedFavorites.map((id) => `${id}`);
@@ -127,7 +125,7 @@ function ResultCard({ bookingState, category, isFavorite, item, onBook, onSelect
   );
 }
 
-export function ResultsPage({ cdsProfileId, criteria, getAccessToken, locations, onSearch }) {
+export function ResultsPage({ cdsProfileId, criteria, locations, onSearch }) {
   const navigate = useNavigate();
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,26 +190,6 @@ export function ResultsPage({ cdsProfileId, criteria, getAccessToken, locations,
 
         if (isCurrent) {
           setResults(data);
-
-          if (criteria.category === "flights" && getAccessToken) {
-            try {
-              const accessToken = await getAccessToken();
-              const bookedFlights = await getBookedFlights(accessToken);
-              const nextBookingStates = {};
-
-              for (const result of data) {
-                if (bookedFlights.some((booking) => isSameFlight(result, booking.flight))) {
-                  nextBookingStates[result.id] = "confirmed";
-                }
-              }
-
-              if (isCurrent) {
-                setBookingStates(nextBookingStates);
-              }
-            } catch {
-              // Results should remain usable even if existing bookings cannot be checked.
-            }
-          }
         }
       } catch (requestError) {
         if (isCurrent) {
@@ -229,7 +207,7 @@ export function ResultsPage({ cdsProfileId, criteria, getAccessToken, locations,
     return () => {
       isCurrent = false;
     };
-  }, [criteria, getAccessToken]);
+  }, [criteria]);
 
   async function handleBooking(type, itemId) {
     setError("");
@@ -239,13 +217,11 @@ export function ResultsPage({ cdsProfileId, criteria, getAccessToken, locations,
     }));
 
     try {
-      const accessToken = getAccessToken ? await getAccessToken() : null;
-
       await createBooking({
         type,
         itemId,
         travelers: Number.parseInt(criteria.travelers, 10) || 1
-      }, accessToken);
+      }, null);
 
       setBookingStates((current) => ({
         ...current,
@@ -282,7 +258,7 @@ export function ResultsPage({ cdsProfileId, criteria, getAccessToken, locations,
 
         await updateCDSProfile(cdsProfileId, {
           application_data: {
-            [ASGARDEO_CLIENT_ID]: {
+            wayfinder: {
               flight_no: favoritedFlights
             }
           }
@@ -351,8 +327,3 @@ export function ResultsPage({ cdsProfileId, criteria, getAccessToken, locations,
   );
 }
 
-export function ResultsPageWithAuth(props) {
-  const { getAccessToken } = useAsgardeo();
-
-  return <ResultsPage {...props} getAccessToken={getAccessToken} />;
-}

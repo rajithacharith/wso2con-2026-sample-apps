@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import { useAsgardeo } from "@asgardeo/react";
 import {
   ArrowRight,
   Clock3,
@@ -12,184 +10,6 @@ import {
   Star
 } from "lucide-react";
 import { SearchPanel } from "../components/SearchPanel";
-import { createBooking, getFlight } from "../api";
-import { ASGARDEO_CLIENT_ID, getCDSProfile } from "../cds-api";
-
-function extractFavoriteFlightIds(profile) {
-  const normalizedProfile = profile?.data || profile?.profile || profile || {};
-  const applicationData = normalizedProfile?.application_data || normalizedProfile?.applicationData || {};
-  const appScopedFavorites = applicationData?.[ASGARDEO_CLIENT_ID]?.flight_no;
-
-  if (Array.isArray(appScopedFavorites)) {
-    return appScopedFavorites.map((id) => `${id}`);
-  }
-
-  for (const appData of Object.values(applicationData)) {
-    if (Array.isArray(appData?.flight_no)) {
-      return appData.flight_no.map((id) => `${id}`);
-    }
-  }
-
-  return [];
-}
-
-function QuickBookingButton({ bookingState, onClick }) {
-  const isBooking = bookingState === "booking";
-  const isConfirmed = bookingState === "confirmed";
-
-  return (
-    <button
-      className={`card-action ${isConfirmed ? "card-action--confirmed" : ""}`}
-      type="button"
-      disabled={isBooking || isConfirmed}
-      onClick={onClick}
-    >
-      {isBooking ? "Booking..." : isConfirmed ? "Booked" : "Book flight"}
-    </button>
-  );
-}
-
-function QuickBookingsSection({ cdsProfileId }) {
-  const { getAccessToken } = useAsgardeo();
-  const [favoriteFlights, setFavoriteFlights] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [bookingStates, setBookingStates] = useState({});
-
-  useEffect(() => {
-    let isCurrent = true;
-
-    async function loadFavorites() {
-      if (!cdsProfileId) {
-        if (isCurrent) {
-          setFavoriteFlights([]);
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      setIsLoading(true);
-      setError("");
-
-      try {
-        const profile = await getCDSProfile(cdsProfileId);
-        const favoriteIds = extractFavoriteFlightIds(profile);
-
-        if (favoriteIds.length === 0) {
-          if (isCurrent) {
-            setFavoriteFlights([]);
-          }
-          return;
-        }
-
-        const flights = await Promise.all(
-          favoriteIds.map(async (id) => {
-            try {
-              return await getFlight(id);
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        if (isCurrent) {
-          setFavoriteFlights(flights.filter(Boolean));
-        }
-      } catch (requestError) {
-        if (isCurrent) {
-          setFavoriteFlights([]);
-          setError(requestError.message);
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    loadFavorites();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [cdsProfileId]);
-
-  async function handleBooking(itemId) {
-    setError("");
-    setBookingStates((current) => ({
-      ...current,
-      [itemId]: "booking"
-    }));
-
-    try {
-      const accessToken = getAccessToken ? await getAccessToken() : null;
-
-      await createBooking({
-        type: "flight",
-        itemId,
-        travelers: 1
-      }, accessToken);
-
-      setBookingStates((current) => ({
-        ...current,
-        [itemId]: "confirmed"
-      }));
-    } catch (requestError) {
-      setBookingStates((current) => ({
-        ...current,
-        [itemId]: requestError.message.includes("already exists") ? "confirmed" : "idle"
-      }));
-      setError(requestError.message);
-    }
-  }
-
-  return (
-    <section className="content-band quick-bookings-section" aria-label="Quick bookings from CDS favorites">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Quick bookings</p>
-          <h2>Your favorite flights</h2>
-        </div>
-      </div>
-
-      {error && (
-        <div className="api-status api-status--error" role="status">
-          {error}
-        </div>
-      )}
-
-      {isLoading ? (
-        <p className="empty-state">Loading favorite flights...</p>
-      ) : favoriteFlights.length === 0 ? (
-        <p className="empty-state">No favorite flights found yet. Mark favorites in search results.</p>
-      ) : (
-        <div className="quick-bookings-grid">
-          {favoriteFlights.map((flight) => (
-            <article className="result-card" key={flight.id}>
-              <div>
-                <p className="result-label">
-                  {flight.airline} · {flight.stops === 0 ? "Nonstop" : `${flight.stops} stop`}
-                </p>
-                <h2>{flight.from} to {flight.to}</h2>
-                <p>
-                  {flight.departureTime} - {flight.arrivalTime} · {flight.duration} · {flight.dates}
-                </p>
-              </div>
-              <div className="result-side">
-                <strong>{flight.currency === "USD" ? "$" : `${flight.currency} `}{flight.price}</strong>
-                <span>{flight.cabin}</span>
-                <QuickBookingButton
-                  bookingState={bookingStates[flight.id] || "idle"}
-                  onClick={() => handleBooking(flight.id)}
-                />
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
 
 const pageDetails = {
   flights: {
@@ -350,14 +170,10 @@ const pageDetails = {
   }
 };
 
-export function HomePage({
-  category = "flights",
-  hideHeroSupport = false,
-  heroHeading,
-  locations,
-  onSearch,
-  quickBookings
-}) {
+export function HomePage({ category = "flights", locations, onSearch }) {
+  const hideHeroSupport = false;
+  const heroHeading = undefined;
+  const quickBookings = undefined;
   const details = pageDetails[category] || pageDetails.flights;
   const isGreetingHero = hideHeroSupport;
 
@@ -536,27 +352,3 @@ export function HomePage({
   );
 }
 
-export function SignedInHomePage({ category = "flights", cdsProfileId, locations, onSearch }) {
-  const { isSignedIn, user } = useAsgardeo();
-
-  if (!isSignedIn) {
-    return <HomePage category={category} locations={locations} onSearch={onSearch} />;
-  }
-
-  const firstName = user?.name?.givenName || "";
-  const lastName = user?.name?.familyName || "";
-  const fullName = `${firstName} ${lastName}`.trim();
-  const email = user?.email || user?.mail || user?.username || user?.userName || "";
-  const greetingName = firstName || fullName || email || "Traveler";
-
-  return (
-    <HomePage
-      hideHeroSupport
-      category={category}
-      heroHeading={`Welcome back, ${greetingName}.`}
-      quickBookings={category === "flights" ? <QuickBookingsSection cdsProfileId={cdsProfileId} /> : null}
-      locations={locations}
-      onSearch={onSearch}
-    />
-  );
-}

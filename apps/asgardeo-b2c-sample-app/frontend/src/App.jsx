@@ -1,54 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { useAsgardeo } from "@asgardeo/react";
 import {
-  ChevronDown,
-  CircleUserRound,
-  LogOut,
   MessageCircle,
   Plane,
   Send,
-  ShieldCheck,
   X
 } from "lucide-react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { getLocations } from "./api";
-import { clearCDSCookies, ensureCDSProfile, initializeCDSFromCookie } from "./cds-api";
-import { BookingDetailsPageWithAuth } from "./pages/BookingDetailsPageWithAuth";
-import { BookingsPageWithAuth } from "./pages/BookingsPageWithAuth";
-import { BookingsUnavailable } from "./pages/BookingsUnavailable";
 import { FlightDetailsPage } from "./pages/FlightDetailsPage";
-import { HomePage, SignedInHomePage } from "./pages/HomePage";
-import { PaymentPageWithAuth } from "./pages/PaymentPageWithAuth";
-import { ResultsPage, ResultsPageWithAuth } from "./pages/ResultsPage";
+import { HomePage } from "./pages/HomePage";
+import { ResultsPage } from "./pages/ResultsPage";
 import { buildResultsPath, readCriteria } from "./utils/routes";
 
 const AGENT_CHAT_URL = import.meta.env.VITE_AGENT_CHAT_URL || "ws://localhost:8790/chat";
-const ASGARDEO_BASE_URL = import.meta.env.VITE_ASGARDEO_BASE_URL || "";
-const ASGARDEO_ORG_NAME = getAsgardeoOrgName();
-const SIGN_UP_URL = ASGARDEO_ORG_NAME
-  ? `https://accounts.asgardeo.io/t/${encodeURIComponent(ASGARDEO_ORG_NAME)}/accounts/register`
-  : "https://accounts.asgardeo.io/accounts/register";
-
-function getAsgardeoOrgName() {
-  const configuredOrgName = import.meta.env.VITE_ASGARDEO_ORG_NAME?.trim();
-
-  if (configuredOrgName) {
-    return configuredOrgName;
-  }
-
-  if (!ASGARDEO_BASE_URL) {
-    return "";
-  }
-
-  try {
-    const pathParts = new URL(ASGARDEO_BASE_URL).pathname.split("/").filter(Boolean);
-    const tenantIndex = pathParts.indexOf("t");
-
-    return tenantIndex >= 0 ? pathParts[tenantIndex + 1] || "" : "";
-  } catch {
-    return "";
-  }
-}
 
 function createChatMessage(role, content) {
   return {
@@ -58,29 +22,7 @@ function createChatMessage(role, content) {
   };
 }
 
-function hasAsgardeoCallbackParams(search) {
-  const params = new URLSearchParams(search);
-
-  return Boolean((params.get("code") && params.get("state")) || params.get("error"));
-}
-
-function AuthenticatedHeader({ authReady }) {
-  if (!authReady) {
-    return <SignedOutHeader disabled />;
-  }
-
-  return <LiveAuthHeader />;
-}
-
-function PrimaryNav({ authReady }) {
-  if (!authReady) {
-    return <PublicPrimaryNav />;
-  }
-
-  return <LivePrimaryNav />;
-}
-
-function PublicPrimaryNav() {
+function PrimaryNav() {
   return (
     <nav className="header-nav" aria-label="Primary navigation">
       <a href="/flights#search">Search</a>
@@ -90,143 +32,7 @@ function PublicPrimaryNav() {
   );
 }
 
-function LivePrimaryNav() {
-  const { isSignedIn } = useAsgardeo();
-
-  if (isSignedIn) {
-    return <span aria-hidden="true" />;
-  }
-
-  return <PublicPrimaryNav />;
-}
-
-function LiveAuthHeader() {
-  const { isSignedIn, isLoading, signIn, signOut, user } = useAsgardeo();
-  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
-  const accountMenuRef = useRef(null);
-  const firstName = user?.name?.givenName || "";
-  const lastName = user?.name?.familyName || "";
-  const fullName = `${firstName} ${lastName}`.trim();
-  const email = user?.email || user?.mail || user?.username || user?.userName || "";
-  const displayName = fullName || email || user?.sub || "Traveler";
-
-  useEffect(() => {
-    function handlePointerDown(event) {
-      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
-        setIsAccountMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, []);
-
-  if (isSignedIn) {
-    return (
-      <div className="auth-cluster account-menu-wrap" ref={accountMenuRef}>
-        <button
-          className="user-chip"
-          type="button"
-          aria-expanded={isAccountMenuOpen}
-          aria-haspopup="menu"
-          onClick={() => setIsAccountMenuOpen((current) => !current)}
-        >
-          <CircleUserRound className="user-chip-avatar" size={28} />
-          <span className="user-chip-text">
-            <span className="user-chip-name">{displayName}</span>
-            {fullName && email && <span className="user-chip-email">{email}</span>}
-          </span>
-          <ChevronDown
-            className={`user-chip-chevron ${isAccountMenuOpen ? "user-chip-chevron--open" : ""}`}
-            size={18}
-          />
-        </button>
-        {isAccountMenuOpen && (
-          <div className="account-menu" role="menu">
-            <Link className="account-menu-item" to="/bookings" role="menuitem">
-              <CircleUserRound size={18} />
-              <span>My Bookings</span>
-            </Link>
-            <button
-              className="account-menu-item"
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                clearCDSCookies();
-                signOut();
-              }}
-            >
-              <LogOut size={18} />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="auth-cluster">
-      <button
-        className="text-button"
-        type="button"
-        disabled={isLoading}
-        onClick={() => signIn()}
-      >
-        Sign in
-      </button>
-      <a className="primary-small" href={SIGN_UP_URL}>
-        Sign up
-      </a>
-    </div>
-  );
-}
-
-function SignedOutHeader({ disabled }) {
-  return (
-    <div className="auth-cluster">
-      <button className="text-button" type="button" disabled={disabled}>
-        Sign in
-      </button>
-      <button className="primary-small" type="button" disabled={disabled}>
-        Sign up
-      </button>
-    </div>
-  );
-}
-
-function FooterLinks({ authReady }) {
-  if (!authReady) {
-    return <PublicFooterLinks />;
-  }
-
-  return <LiveFooterLinks />;
-}
-
-function PublicFooterLinks() {
-  return (
-    <nav className="footer-links" aria-label="Footer navigation">
-      <a href="/flights#search">Search</a>
-      <a href="/flights#deals">Deals</a>
-      <a href="/flights#faq">FAQ</a>
-    </nav>
-  );
-}
-
-function LiveFooterLinks() {
-  const { isSignedIn } = useAsgardeo();
-
-  if (isSignedIn) {
-    return null;
-  }
-
-  return <PublicFooterLinks />;
-}
-
-function SiteFooter({ authReady }) {
+function SiteFooter() {
   return (
     <footer className="site-footer">
       <div>
@@ -236,9 +42,13 @@ function SiteFooter({ authReady }) {
           </span>
           <span>Wayfinder</span>
         </Link>
-        <p>Modern travel booking flows, secured with Asgardeo.</p>
+        <p>Modern travel booking flows, powered by Wayfinder.</p>
       </div>
-      <FooterLinks authReady={authReady} />
+      <nav className="footer-links" aria-label="Footer navigation">
+        <a href="/flights#search">Search</a>
+        <a href="/flights#deals">Deals</a>
+        <a href="/flights#faq">FAQ</a>
+      </nav>
     </footer>
   );
 }
@@ -452,214 +262,41 @@ function FlightDetailsRoute({ criteria }) {
   return <FlightDetailsPage criteria={criteria} flightId={flightId} />;
 }
 
-function PaymentRoute({ criteria }) {
-  const { flightId = "" } = useParams();
-
-  return <PaymentPageWithAuth criteria={criteria} flightId={flightId} />;
-}
-
-function BookingDetailsRoute() {
-  const { bookingId = "" } = useParams();
-
-  return <BookingDetailsPageWithAuth bookingId={bookingId} />;
-}
-
-function LandingRoute({ authReady, category, cdsProfileId, locations, onSearch }) {
-  if (authReady) {
-    return (
-      <SignedInHomePage
-        category={category}
-        cdsProfileId={cdsProfileId}
-        locations={locations}
-        onSearch={onSearch}
-      />
-    );
-  }
-
-  return <HomePage category={category} locations={locations} onSearch={onSearch} />;
-}
-
-function LiveCDSProfileBootstrap({ cdsProfileId, onProfileCreated }) {
-  const { isLoading, isSignedIn } = useAsgardeo();
-  const location = useLocation();
-
-  useEffect(() => {
-    if (location.pathname !== "/flights" || location.hash || cdsProfileId) {
-      return;
-    }
-
-    if (isLoading || isSignedIn) {
-      return;
-    }
-
-    let isCurrent = true;
-
-    async function createCDSProfileOnMount() {
-      try {
-        const profile = await ensureCDSProfile({});
-        const createdProfileId = profile?.profile_id || profile?.id;
-
-        if (isCurrent && createdProfileId) {
-          onProfileCreated(createdProfileId);
-        }
-      } catch (error) {
-        console.warn("Failed to create CDS profile:", error.message);
-      }
-    }
-
-    createCDSProfileOnMount();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [cdsProfileId, isLoading, isSignedIn, location.hash, location.pathname, onProfileCreated]);
-
-  return null;
-}
-
-function GuestCDSProfileBootstrap({ cdsProfileId, onProfileCreated }) {
-  const location = useLocation();
-
-  useEffect(() => {
-    if (location.pathname !== "/flights" || location.hash || cdsProfileId) {
-      return;
-    }
-
-    let isCurrent = true;
-
-    async function createCDSProfileOnMount() {
-      try {
-        const profile = await ensureCDSProfile({});
-        const createdProfileId = profile?.profile_id || profile?.id;
-
-        if (isCurrent && createdProfileId) {
-          onProfileCreated(createdProfileId);
-        }
-      } catch (error) {
-        console.warn("Failed to create CDS profile:", error.message);
-      }
-    }
-
-    createCDSProfileOnMount();
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [cdsProfileId, location.hash, location.pathname, onProfileCreated]);
-
-  return null;
-}
-
-function RootRoute({ authReady, cdsProfileId, locations, onSearch }) {
-  const location = useLocation();
-
-  if (!hasAsgardeoCallbackParams(location.search)) {
-    return <Navigate to="/flights" replace />;
-  }
-
-  return (
-    <LandingRoute
-      authReady={authReady}
-      category="flights"
-      cdsProfileId={cdsProfileId}
-      locations={locations}
-      onSearch={onSearch}
-    />
-  );
-}
-
-function AppRoutes({ authReady, cdsProfileId, criteria, locations, onSearch }) {
+function AppRoutes({ criteria, locations, onSearch }) {
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          <RootRoute
-            authReady={authReady}
-            cdsProfileId={cdsProfileId}
-            locations={locations}
-            onSearch={onSearch}
-          />
-        }
-      />
+      <Route path="/" element={<Navigate to="/flights" replace />} />
       <Route
         path="/flights"
-        element={
-          <LandingRoute
-            authReady={authReady}
-            category="flights"
-            cdsProfileId={cdsProfileId}
-            locations={locations}
-            onSearch={onSearch}
-          />
-        }
+        element={<HomePage category="flights" locations={locations} onSearch={onSearch} />}
       />
       <Route
         path="/hotels"
-        element={
-          <LandingRoute
-            authReady={authReady}
-            category="hotels"
-            cdsProfileId={cdsProfileId}
-            locations={locations}
-            onSearch={onSearch}
-          />
-        }
+        element={<HomePage category="hotels" locations={locations} onSearch={onSearch} />}
       />
       <Route
         path="/trips"
-        element={
-          <LandingRoute
-            authReady={authReady}
-            category="trips"
-            cdsProfileId={cdsProfileId}
-            locations={locations}
-            onSearch={onSearch}
-          />
-        }
+        element={<HomePage category="trips" locations={locations} onSearch={onSearch} />}
       />
       <Route
         path="/results"
         element={
-          authReady ? (
-            <ResultsPageWithAuth
-              cdsProfileId={cdsProfileId}
-              criteria={criteria}
-              locations={locations}
-              onSearch={onSearch}
-            />
-          ) : (
-            <ResultsPage
-              cdsProfileId={cdsProfileId}
-              criteria={criteria}
-              locations={locations}
-              onSearch={onSearch}
-            />
-          )
+          <ResultsPage
+            criteria={criteria}
+            locations={locations}
+            onSearch={onSearch}
+          />
         }
       />
       <Route path="/flights/:flightId" element={<FlightDetailsRoute criteria={criteria} />} />
-      <Route
-        path="/payment/flight/:flightId"
-        element={authReady ? <PaymentRoute criteria={criteria} /> : <BookingsUnavailable />}
-      />
-      <Route
-        path="/bookings/:bookingId"
-        element={authReady ? <BookingDetailsRoute /> : <BookingsUnavailable />}
-      />
-      <Route
-        path="/bookings"
-        element={authReady ? <BookingsPageWithAuth /> : <BookingsUnavailable />}
-      />
       <Route path="*" element={<Navigate to="/flights" replace />} />
     </Routes>
   );
 }
 
-function App({ authReady }) {
+function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [cdsProfileId, setCdsProfileId] = useState(() => initializeCDSFromCookie() || null);
   const [locations, setLocations] = useState({
     flights: [],
     hotels: [],
@@ -731,33 +368,16 @@ function App({ authReady }) {
           </span>
           <span>Wayfinder</span>
         </Link>
-        <PrimaryNav authReady={authReady} />
-        <AuthenticatedHeader authReady={authReady} />
+        <PrimaryNav />
       </header>
 
-      {!authReady && (
-        <div className="setup-banner" role="status">
-          <ShieldCheck size={18} />
-          Add `VITE_ASGARDEO_CLIENT_ID` and `VITE_ASGARDEO_BASE_URL` to enable live
-          Asgardeo sign in, sign up, and sign out.
-        </div>
-      )}
-
-      {authReady ? (
-        <LiveCDSProfileBootstrap cdsProfileId={cdsProfileId} onProfileCreated={setCdsProfileId} />
-      ) : (
-        <GuestCDSProfileBootstrap cdsProfileId={cdsProfileId} onProfileCreated={setCdsProfileId} />
-      )}
-
       <AppRoutes
-        authReady={authReady}
-        cdsProfileId={cdsProfileId}
         criteria={criteria}
         locations={locations}
         onSearch={handleSearch}
       />
       <ChatWidget />
-      <SiteFooter authReady={authReady} />
+      <SiteFooter />
     </div>
   );
 }
