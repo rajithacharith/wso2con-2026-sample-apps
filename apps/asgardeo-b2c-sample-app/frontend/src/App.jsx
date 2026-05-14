@@ -265,7 +265,10 @@ function FlightDetailsRoute({ criteria }) {
 function AppRoutes({ criteria, locations, onSearch }) {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/flights" replace />} />
+      <Route
+        path="/"
+        element={<HomePage category="flights" locations={locations} onSearch={onSearch} />}
+      />
       <Route
         path="/flights"
         element={<HomePage category="flights" locations={locations} onSearch={onSearch} />}
